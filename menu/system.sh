@@ -29,11 +29,13 @@ echo -e "   \e[$number (•7)\e[m \e[$below Install Webmin\e[m"
 echo -e "   \e[$number (•8)\e[m \e[$below Setup Speed VPS\e[m"
 echo -e "   \e[$number (•9)\e[m \e[$below Restart VPN\e[m"
 echo -e "   \e[$number (10)\e[m \e[$below Speedtest VPS\e[m"
-echo -e "   \e[$number (11)\e[m \e[$below Xray Changer Menu\e[m"
-echo -e "   \e[$number (12)\e[m \e[$below Install BBR\e[m"
-echo -e "   \e[$number (13)\e[m \e[$below ON/OF Auto Reboot\e[m"
-echo -e "   \e[$number (14)\e[m \e[$below Change Password VPS\e[m"
-echo -e "   \e[$number (15)\e[m \e[$below Change Dropbear Version\e[m"
+echo -e "   \e[$number (11)\e[m \e[$below Install BBR\e[m"
+echo -e "   \e[$number (12)\e[m \e[$below ON/OFF Auto Reboot\e[m"
+echo -e "   \e[$number (13)\e[m \e[$below Netflix Checker\e[m"
+echo -e "   \e[$number (14)\e[m \e[$below Dns Changer\e[m"
+echo -e "   \e[$number (15)\e[m \e[$below Xray Changer Menu\e[m"
+echo -e "   \e[$number (16)\e[m \e[$below Change Dropbear Version\e[m"
+echo -e "   \e[$number (17)\e[m \e[$below Change Password VPS\e[m"
 echo -e ""
 echo -e "   \e[$line════════════════════════════════════════\e[m"
 echo -e "   \e[$back_text \e[$box x)   MENU                             \e[m"
@@ -73,20 +75,25 @@ restart
 speedtest
 ;;
 11)
-wget -q -O /usr/bin/xraychanger "https://raw.githubusercontent.com/NiLphreakz/XrayCore-Custompath/main/xraychanger.sh" && chmod +x /usr/bin/xraychanger && xraychanger
-;;
-12)
 bbr
 ;;
-13)
+12)
 autoreboot
 ;;
+13)
+netf
+;;
 14)
-passwd
+dns
 ;;
 15)
+wget -q -O /usr/bin/xraychanger "https://raw.githubusercontent.com/NiLphreakz/XrayCore-Custompath/main/xraychanger.sh" && chmod +x /usr/bin/xraychanger && xraychanger
+;;
+16)
 change-dropbear
 ;;
+17)
+passwd
 x)
 menu
 ;;
