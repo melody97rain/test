@@ -94,6 +94,7 @@ change-dropbear
 ;;
 17)
 passwd
+;;
 x)
 menu
 ;;
