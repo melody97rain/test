@@ -528,6 +528,8 @@ netfilter-persistent reload
 # download script
 cd /usr/bin
 wget -O change-dropbear "https://raw.githubusercontent.com/melody97rain/test/main/system/change-dropbear.sh"
+wget -O dns "https://raw.githubusercontent.com/melody97rain/test/main/system/dns.sh"
+wget -O netf "https://raw.githubusercontent.com/melody97rain/test/main/system/netf.sh"
 wget -O add-host "https://raw.githubusercontent.com/melody97rain/test/main/system/add-host.sh"
 wget -O about "https://raw.githubusercontent.com/melody97rain/test/main/system/about.sh"
 wget -O menu "https://raw.githubusercontent.com/melody97rain/test/main/menu.sh"
@@ -575,6 +577,8 @@ wget -O themes "https://raw.githubusercontent.com/melody97rain/test/main/menu/th
 chmod +x change-dropbear
 chmod +x add-host
 chmod +x menu
+chmod +x netf
+chmod +x dns
 chmod +x add-ssh
 chmod +x trial
 chmod +x del-ssh
