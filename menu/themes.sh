@@ -233,12 +233,12 @@ figlet -f Epic "Premium"
 echo -e "   \e[$number (26)\e[m \e[1;30m Epic\e[m"
 echo -e ""
 echo -e ""
-figlet -f fire_font-k "Premium"
-echo -e "   \e[$number (27)\e[m \e[1;30m fire_font-k\e[m"
+figlet -f Lean "Premium"
+echo -e "   \e[$number (27)\e[m \e[1;30m Lean\e[m"
 echo -e ""
 echo -e ""
-figlet -f fire_font-s "Premium"
-echo -e "   \e[$number (28)\e[m \e[1;30m fire_font-s\e[m"
+figlet -f 3d_diagonal "Premium"
+echo -e "   \e[$number (28)\e[m \e[1;30m 3d_diagonal\e[m"
 echo -e ""
 echo -e ""
 figlet -f Georgi16 "Premium"
@@ -249,8 +249,8 @@ figlet -f Slant "Premium"
 echo -e "   \e[$number (30)\e[m \e[1;30m Slant\e[m"
 echo -e ""
 echo -e ""
-figlet -f Banner "Premium"
-echo -e "   \e[$number (31)\e[m \e[1;30m Banner\e[m"
+figlet -f Alligator "Premium"
+echo -e "   \e[$number (31)\e[m \e[1;30m Alligator\e[m"
 echo -e ""
 echo -e ""
 figlet -f Poison "Premium"
@@ -457,15 +457,15 @@ sleep 0.5
 menu
 elif [[ "$b" = "27" ]]; then
 clear
-echo "fire_font-k" > /usr/bin/test
-echo -e "Succesfully Set fire_font-k Banner."
+echo "Lean" > /usr/bin/test
+echo -e "Succesfully Set Lean."
 echo -e "\e[0;32mDone\e[0m"
 sleep 0.5
 menu
 elif [[ "$b" = "28" ]]; then
 clear
-echo "fire_font-s" > /usr/bin/test
-echo -e "Succesfully Set fire_font-s Banner."
+echo "3d_diagonal" > /usr/bin/test
+echo -e "Succesfully Set 3d_diagonal."
 echo -e "\e[0;32mDone\e[0m"
 sleep 0.5
 menu
@@ -485,8 +485,8 @@ sleep 0.5
 menu
 elif [[ "$b" = "31" ]]; then
 clear
-echo "Banner" > /usr/bin/test
-echo -e "Succesfully Set Banner Banner."
+echo "Alligator" > /usr/bin/test
+echo -e "Succesfully Set Alligator Banner."
 echo -e "\e[0;32mDone\e[0m"
 sleep 0.5
 menu
