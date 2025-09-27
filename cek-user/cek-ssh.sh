@@ -263,7 +263,7 @@ done
 
 declare -A j_pid_user j_pid_ip j_pid_port
 declare -A pid_user pid_ip pid_port pid_cmd pid_owner
-declare -A pid_start  # Deklarasi hanya sekali
+declare -A pid_start
 
 if command -v journalctl >/dev/null 2>&1; then
   journalctl --no-pager -u sshd --since "$SEED_SINCE" -o short-iso 2>/dev/null \
@@ -370,14 +370,12 @@ for pid in "${pids_all[@]}"; do
   user="${pid_user[$pid]:-}"
   owner="${pid_owner[$pid]:-}"
   if [ -z "$user" ]; then user="$owner"; fi
-  if [ -z "$user" ]; then user="nil"; fi
+  if [ -z "$user" ]; then continue; fi
 
   user_lc="$(lower "$user" || true)"
 
   if [ "$user_lc" = "root" ] && [ "$SKIP_ROOT" -eq 1 ]; then continue; fi
-  if [ "$user_lc" != "nil" ]; then
-    if [ "$user_lc" = "sshd" ] || [ "$user_lc" = "unknown" ]; then continue; fi
-  fi
+  if [ "$user_lc" = "sshd" ] || [ "$user_lc" = "unknown" ]; then continue; fi
 
   ip="${pid_ip[$pid]:-unknown}"
   if [ "$ip" != "127.0.0.1" ]; then continue; fi
@@ -390,36 +388,6 @@ for pid in "${pids_all[@]}"; do
     start_human="$(date -d "@$start_ts" '+%H:%M' 2>/dev/null || echo '-')"
   else
     start_human='-'
-  fi
-
-  if [ "$user_lc" = "nil" ]; then
-    rows_pid+=("$pid"); rows_user+=("$user"); rows_ip+=("$ipport"); rows_port+=("$port")
-    rows_start_ts+=("$start_ts"); rows_start_human+=("$start_human")
-    continue
-  fi
-
-  key="${user}|${ip}"
-
-  duplicate=0
-  if [ -n "${seen_key_ts_list[$key]:-}" ]; then
-    for exist_ts in ${seen_key_ts_list[$key]}; do
-      diff=$(( start_ts - exist_ts ))
-      if [ $diff -lt 0 ]; then diff=$(( -diff )); fi
-      if [ "$diff" -le 1 ]; then
-        duplicate=1
-        break
-      fi
-    done
-  fi
-
-  if [ "$duplicate" -eq 1 ]; then
-    continue
-  fi
-
-  if [ -z "${seen_key_ts_list[$key]:-}" ]; then
-    seen_key_ts_list[$key]="$start_ts"
-  else
-    seen_key_ts_list[$key]="${seen_key_ts_list[$key]} $start_ts"
   fi
 
   rows_pid+=("$pid"); rows_user+=("$user"); rows_ip+=("$ipport"); rows_port+=("$port")
