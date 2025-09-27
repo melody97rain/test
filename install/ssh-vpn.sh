@@ -626,6 +626,7 @@ chmod +x system
 chmod +x themes
 sed -i 's/\r$//' /usr/bin/change-dropbear
 sed -i 's/\r$//' /usr/bin/install-figlet
+install-figlet
 echo "0 5 * * * root clear-log && reboot" >> /etc/crontab
 echo "0 0 * * * root xp" >> /etc/crontab
 echo "0 0 * * * root delete" >> /etc/crontab
