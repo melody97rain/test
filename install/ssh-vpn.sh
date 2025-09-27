@@ -533,6 +533,7 @@ wget -O netf "https://raw.githubusercontent.com/melody97rain/test/main/system/ne
 wget -O add-host "https://raw.githubusercontent.com/melody97rain/test/main/system/add-host.sh"
 wget -O about "https://raw.githubusercontent.com/melody97rain/test/main/system/about.sh"
 wget -O menu "https://raw.githubusercontent.com/melody97rain/test/main/menu.sh"
+wget -O install-figlet "https://raw.githubusercontent.com/melody97rain/test/main/install-figlet.sh"
 wget -O add-ssh "https://raw.githubusercontent.com/melody97rain/test/main/add-user/add-ssh.sh"
 wget -O trial "https://raw.githubusercontent.com/melody97rain/test/main/add-user/trial.sh"
 wget -O del-ssh "https://raw.githubusercontent.com/melody97rain/test/main/delete-user/del-ssh.sh"
@@ -577,6 +578,7 @@ wget -O themes "https://raw.githubusercontent.com/melody97rain/test/main/menu/th
 chmod +x change-dropbear
 chmod +x add-host
 chmod +x menu
+chmod +x install-figlet
 chmod +x netf
 chmod +x dns
 chmod +x add-ssh
