@@ -19,31 +19,24 @@ trap cleanup EXIT
 
 SEED_SINCE="${1:-7 days ago}"
 
-# helpers
 seg() { printf '%*s' "$1" '' | tr ' ' '-'; }
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
-# strip control characters (safe for multibyte)
 sanitize_field() {
   local s="$1"
-  # remove control characters (C0/C1): awk gsub(/[[:cntrl:]]/,"")
   awk -v str="$s" 'BEGIN{gsub(/[[:cntrl:]]/,"",str); print str}'
 }
 
-# Character-safe truncate (uses awk length/substr), append ASCII '...' if truncated
 truncate_field() {
   local s="$1"; local w="$2"
   if [ "${w:-0}" -le 0 ]; then printf '%s' ""; return; fi
-  # remove control chars first
   s="$(sanitize_field "$s")"
-  # awk length works with characters in UTF-8 locales
   local len
   len=$(awk -v str="$s" 'BEGIN{print length(str)}')
   if [ "$len" -le "$w" ]; then
     printf '%s' "$s"
   else
     if [ "$w" -le 3 ]; then
-      # if width tiny, just cut without adding dots
       awk -v str="$s" -v w="$w" 'BEGIN{print substr(str,1,w)}'
     else
       local cut=$((w-3))
@@ -52,7 +45,6 @@ truncate_field() {
   fi
 }
 
-# parse peer like "192.0.2.1:1234" or "[2001:db8::1]:22"
 parse_peer() {
   local peer="$1"
   local ip port
@@ -113,7 +105,6 @@ pids="$(ps -o pid= -C dropbear 2>/dev/null || true)"
 echo
 echo "-----=[ Dropbear User Login ]=------"
 
-# Dropbear table widths
 ID_W=6
 USER_W=12
 IP_W=20
@@ -176,7 +167,6 @@ else
     fi
   done
 
-  # Build per-user counts
   declare -A drop_count
   : > "$USERS_DROP_TMP"
   for pid in $pids; do
@@ -217,10 +207,8 @@ else
       start_time_human="-"
     fi
 
-    # sanitize + truncate (PID numeric => don't append dots)
     sanitized_pid="$(sanitize_field "$pid")"
     if [[ "$sanitized_pid" =~ ^[0-9]+$ ]]; then
-      # if pid length longer than column, cut without dots (pid is ASCII digits)
       if [ "${#sanitized_pid}" -gt "$ID_W" ]; then
         t_pid="${sanitized_pid:0:$ID_W}"
       else
@@ -247,7 +235,6 @@ else
   fi
 fi
 
-# Dropbear summary
 echo ""
 if [ -s "$USERS_DROP_TMP" ]; then
   total_drop=$(wc -l < "$USERS_DROP_TMP" 2>/dev/null || echo 0)
@@ -261,10 +248,10 @@ echo "------------------------------------"
 # ---------------------------
 # OpenSSH section (phone-friendly)
 # ---------------------------
+
 TMP_SS="$(mktemp /tmp/cek-sshd-ss-XXXXXX)" || exit 1
 TMP_JOURNAL="$(mktemp /tmp/cek-sshd-journal-XXXXXX)" || exit 1
 
-# By default skip root; use --all or -a to include root
 SKIP_ROOT=1
 for a in "$@"; do
   case "$a" in
@@ -274,8 +261,10 @@ for a in "$@"; do
   esac
 done
 
-# journal mapping (optional)
 declare -A j_pid_user j_pid_ip j_pid_port
+declare -A pid_user pid_ip pid_port pid_cmd pid_owner
+declare -A pid_start  # Deklarasi hanya sekali
+
 if command -v journalctl >/dev/null 2>&1; then
   journalctl --no-pager -u sshd --since "$SEED_SINCE" -o short-iso 2>/dev/null \
     | sed -n "s/.*sshd\[\([0-9]\+\)\].*Accepted [^ ]* for \([^ ]\+\) from \(\[[^]]\+\|\([0-9.]\+\|[0-9a-fA-F:]\+\)\) port \([0-9]\+\).*/\1 \2 \3 \5/p" \
@@ -297,8 +286,6 @@ if ! command -v ss >/dev/null 2>&1; then
 fi
 
 ss -tnp 2>/dev/null | awk '/sshd/ { print $0 }' > "$TMP_SS" || true
-
-declare -A pid_user pid_ip pid_port pid_start pid_cmd pid_owner
 
 while IFS= read -r line; do
   [ -z "$line" ] && continue
@@ -335,22 +322,25 @@ while IFS= read -r line; do
       pid_start["$pid"]=0
     fi
 
-    # prefer journal mapping if exists
     if [ -n "${j_pid_user[$pid]:-}" ]; then pid_user["$pid"]="${j_pid_user[$pid]}"; fi
     if [ -n "${j_pid_ip[$pid]:-}" ]; then pid_ip["$pid"]="${j_pid_ip[$pid]}"; fi
     if [ -n "${j_pid_port[$pid]:-}" ]; then pid_port["$pid"]="${j_pid_port[$pid]}"; fi
   done
 done < "$TMP_SS"
 
-# collect pids
 pids_all=()
-if [ ${#pid_start[@]} -eq 0 ]; then
+set +u
+pid_start_count="${#pid_start[@]}"
+set -u
+
+if [ "$pid_start_count" -eq 0 ]; then
   mapfile -t pids_all < <(ps -eo pid,cmd --no-headers | awk '/\[priv\]/{print $1}' || true)
 else
+  set +u
   mapfile -t pids_all < <(printf "%s\n" "${!pid_start[@]}" | sort -n)
+  set -u
 fi
 
-# try lsof for missing IPs
 if command -v lsof >/dev/null 2>&1; then
   for pid in "${pids_all[@]}"; do
     [ -z "$pid" ] && continue
@@ -366,9 +356,6 @@ if command -v lsof >/dev/null 2>&1; then
   done
 fi
 
-# ---------------------------
-# Build rows with duplicate-suppression rules:
-# ---------------------------
 rows_pid=()
 rows_user=()
 rows_ip=()
@@ -393,7 +380,6 @@ for pid in "${pids_all[@]}"; do
   fi
 
   ip="${pid_ip[$pid]:-unknown}"
-  # only include loopback 127.0.0.1 as requested
   if [ "$ip" != "127.0.0.1" ]; then continue; fi
 
   port="${pid_port[$pid]:-}"
@@ -440,9 +426,6 @@ for pid in "${pids_all[@]}"; do
   rows_start_ts+=("$start_ts"); rows_start_human+=("$start_human")
 done
 
-# ---------------------------
-# Sort rows by start_ts DESC
-# ---------------------------
 rows_count=${#rows_pid[@]}
 if [ "$rows_count" -gt 0 ]; then
   tmp_sort="$(mktemp /tmp/cek-sshd-sort-XXXXXX)" || tmp_sort="/tmp/cek-sshd-sort-fallback"
@@ -456,17 +439,11 @@ else
   sorted_idx=()
 fi
 
-# ---------------------------
-# Compute totals per user
-# ---------------------------
 declare -A user_total
 for u in "${rows_user[@]}"; do
   user_total["$u"]=$(( ${user_total["$u"]:-0} + 1 ))
 done
 
-# ---------------------------
-# Phone-friendly ASCII table printing
-# ---------------------------
 ID_W=6
 USER_W=12
 IP_W=20
@@ -485,7 +462,6 @@ for idx in "${sorted_idx[@]}"; do
   ipport="${rows_ip[$idx]}"; start_human="${rows_start_human[$idx]}"
   total="${user_total[$user]:-1}"
 
-  # sanitize + truncate for printing
   sanitized_pid="$(sanitize_field "$pid")"
   if [[ "$sanitized_pid" =~ ^[0-9]+$ ]]; then
     if [ "${#sanitized_pid}" -gt "$ID_W" ]; then
@@ -513,7 +489,6 @@ if [ "$printed" -eq 0 ]; then
   echo "(No User Login Detected)"
 fi
 
-# show total OpenSSH sessions detected
 echo ""
 if [ "${rows_count:-0}" -gt 0 ]; then
   echo "Total All Online Users: $rows_count"
@@ -544,5 +519,4 @@ if [ -f "/etc/openvpn/server/openvpn-udp.log" ]; then
   grep -w "^CLIENT_LIST" /etc/openvpn/server/openvpn-udp.log 2>/dev/null | cut -d ',' -f 2,3,8 | sed -e 's/,/      /g' || true
 fi
 
-# done
 exit 0
