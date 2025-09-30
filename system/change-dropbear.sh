@@ -1,82 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# install-dropbear-interactive-latest-fixed.sh
-# Perubahan utama:
-# - fix_statoverride() untuk atasi dpkg statoverride yang rujuk kumpulan hilang
-# - detect_latest_version: regex lebih longgar
-# - build_from_source_generic: default --prefix=/usr/local (tidak timpa /usr)
-# - beberapa pemeriksaan utiliti (wget/curl/make) ditambah
+# install-dropbear-interactive-latest.sh (drop-in removed)
+# Interactive-only installer for Dropbear (manual versions + "Latest (auto-detect)")
+# - Manual versions: 2019.78, 2020.81, 2022.82
+# - "Latest (auto-detect)" attempts to find a numeric tag like YYYY.NN and displayed in menu
+# - WILL NOT overwrite /etc/systemd/system/dropbear.service if it exists
+# - NOTE: This modified version REMOVES creation of a systemd drop-in file.
+#
+# Run as root: sudo ./install-dropbear-interactive-latest.sh
 
 if [[ "${EUID:-0}" -ne 0 ]]; then
   echo "Sila jalankan sebagai root (sudo)." >&2
   exit 1
 fi
 
-timestamp() { date +%Y%m%d%H%M%S; }
-
 # -------------------------
-# helper: fix dpkg statoverride yang rujuk kumpulan tiada
-# -------------------------
-fix_statoverride() {
-  local st="/var/lib/dpkg/statoverride"
-  if [[ ! -f "$st" ]]; then
-    return 0
-  fi
-  local bak="/var/lib/dpkg/statoverride.bak.$(timestamp)"
-  cp -a "$st" "$bak"
-  echo "Backup statoverride: $bak"
-
-  # parse each line: user group mode path  (fields separated by spaces)
-  # only remove overrides whose group does not exist (and user if desired)
-  local removed=0
-  while IFS= read -r line; do
-    # skip empty or comment
-    [[ -z "${line// /}" ]] && continue
-    # get second field (group) and fourth field (path)
-    # handle quoted paths (rare) by simple awk split
-    local grp
-    local path
-    grp="$(awk '{print $2}' <<< "$line")" || grp=""
-    path="$(awk '{print $4}' <<< "$line")" || path=""
-    if [[ -z "$grp" || -z "$path" ]]; then
-      continue
-    fi
-    if ! getent group "$grp" >/dev/null 2>&1; then
-      echo "Keluarkan override: group '$grp' tidak wujud -> $path"
-      # try remove via dpkg-statoverride
-      if dpkg-statoverride --remove "$path" 2>/dev/null; then
-        removed=$((removed+1))
-      else
-        # fallback: remove line from file (safer because we backed up)
-        echo "dpkg-statoverride gagal, akan keluarkan baris dari $st"
-        # remove exact line from file (use grep -v with proper escaping)
-        sed -i "\|^$(printf '%s' "$line" | sed 's/[\/&]/\\&/g')$|d" "$st" || true
-        removed=$((removed+1))
-      fi
-    fi
-  done < "$st"
-
-  if [[ $removed -gt 0 ]]; then
-    echo "Selesai: $removed entri dikeluarkan daripada $st"
-  else
-    echo "Tiada entri statoverride yang merujuk kumpulan hilang."
-  fi
-  return 0
-}
-
-# -------------------------
-# detect latest version once (improved)
+# detect latest version once
 # -------------------------
 detect_latest_version() {
+  # Try a few authoritative pages and parse for dropbear-YYYY.NN or "Dropbear YYYY.NN"
   local targets=( \
     "https://matt.ucc.asn.au/dropbear/" \
     "https://matt.ucc.asn.au/dropbear/releases/" \
-    "https://mirror.dropbear.nl/" \
     "https://github.com/mkj/dropbear/releases" \
   )
-  local html
   for url in "${targets[@]}"; do
+    local html=""
     if command -v curl >/dev/null 2>&1; then
       html="$(curl -fsSL "$url" 2>/dev/null || true)"
     elif command -v wget >/dev/null 2>&1; then
@@ -84,12 +34,15 @@ detect_latest_version() {
     else
       return 1
     fi
-    [[ -z "$html" ]] && continue
-
-    # Try patterns: dropbear-YYYY.NN(.tar(.bz2)?) or "Dropbear YYYY.NN"
-    if echo "$html" | grep -qE 'dropbear-[0-9]{4}\.[0-9]{1,2}'; then
-      echo "$html" | grep -Eo 'dropbear-[0-9]{4}\.[0-9]{1,2}' | head -n1 | sed 's/dropbear-//' && return 0
+    if [[ -z "$html" ]]; then
+      continue
     fi
+    # pattern: dropbear-YYYY.NN.tar or dropbear-YYYY.NN.tar.bz2
+    if echo "$html" | grep -qE 'dropbear-[0-9]{4}\.[0-9]{1,2}\.tar'; then
+      echo "$html" | grep -Eo 'dropbear-[0-9]{4}\.[0-9]{1,2}\.tar' | head -n1 \
+        | sed -E 's/dropbear-([0-9]+\.[0-9]+)\.tar.*/\1/' && return 0
+    fi
+    # pattern: "Dropbear 2025.88" etc
     if echo "$html" | grep -qE 'Dropbear [0-9]{4}\.[0-9]{1,2}'; then
       echo "$html" | grep -Eo 'Dropbear [0-9]{4}\.[0-9]{1,2}' | head -n1 | awk '{print $2}' && return 0
     fi
@@ -106,7 +59,7 @@ else
 fi
 
 # -------------------------
-# Interactive menu (sama seperti anda)
+# Interactive menu (uses $LATEST_VER)
 # -------------------------
 while true; do
   echo
@@ -127,7 +80,7 @@ while true; do
           break
         else
           echo "Versi terbaru tidak dapat dikesan; sila pilih versi manual."
-          break
+          break  # back to select -> will re-show menu (outer loop)
         fi
         ;;
       "2019.78"|"2020.81"|"2022.82")
@@ -144,10 +97,12 @@ while true; do
     esac
   done
 
+  # if VER not set (user chose Latest but detection failed), loop again
   if [[ -z "${VER:-}" ]]; then
     continue
   fi
 
+  # Common interactive prompts
   read -rp "Letakkan pakej pada hold selepas pemasangan apt-managed? (y/N): " yn
   if [[ "${yn,,}" =~ ^(y|yes)$ ]]; then HOLD_AFTER="1"; else HOLD_AFTER="0"; fi
 
@@ -166,6 +121,7 @@ while true; do
   read -rp "Teruskan pemasangan? (y/N): " ok
   if [[ ! "${ok,,}" =~ ^(y|yes)$ ]]; then
     echo "Batal; kembali ke menu."
+    # clear VER so menu reappears cleanly
     VER=""
     continue
   fi
@@ -174,7 +130,7 @@ while true; do
 done
 
 # -------------------------
-# Helpers & core functions
+# Helpers & core functions (unchanged logic, drop-in creation removed)
 # -------------------------
 BACKUP_DIR="/root/dropbear-backup-$(date +%Y%m%d%H%M%S)"
 mkdir -p "$BACKUP_DIR"
@@ -195,14 +151,14 @@ stop_dropbear_if_running() {
 }
 
 find_dropbear_binary() {
-  local cands=(/usr/local/sbin/dropbear /usr/sbin/dropbear /usr/bin/dropbear /sbin/dropbear)
+  local cands=(/usr/sbin/dropbear /usr/local/sbin/dropbear /usr/bin/dropbear /sbin/dropbear)
   for p in "${cands[@]}"; do
     if [[ -x "$p" ]]; then
       echo "$p"
       return 0
     fi
   done
-  echo "/usr/local/sbin/dropbear"
+  echo "/usr/sbin/dropbear"
   return 0
 }
 
@@ -269,8 +225,9 @@ success_exit() {
   local binpath
   binpath="$(find_dropbear_binary)"
 
+  # DROP-IN CREATION REMOVED: do not create or modify systemd drop-in files
   if systemctl list-unit-files | grep -q '^dropbear.service'; then
-    echo "Systemd unit detected: installer will NOT create atau modify a drop-in file. Binary: ${binpath} Port: ${port}."
+    echo "Systemd unit detected: installer will NOT create or modify a drop-in file. Binary: ${binpath} Port: ${port}."
   else
     if [[ ! -f /etc/systemd/system/dropbear.service ]]; then
       echo "No systemd unit found; creating minimal /etc/systemd/system/dropbear.service"
@@ -281,7 +238,7 @@ After=network.target
 
 [Service]
 Type=forking
-ExecStart=/usr/local/sbin/dropbear -F -p 22 -P /var/run/dropbear.pid
+ExecStart=/usr/sbin/dropbear -F -p 22 -P /var/run/dropbear.pid
 ExecStop=/bin/kill -TERM $MAINPID
 Restart=on-failure
 
@@ -354,7 +311,7 @@ check_versions_post_install() {
 
   echo
   echo "Memeriksa output versi binary di lokasi biasa:"
-  local BINPATHS=(/usr/local/sbin/dropbear /usr/sbin/dropbear /usr/bin/dropbear /sbin/dropbear)
+  local BINPATHS=(/usr/sbin/dropbear /usr/local/sbin/dropbear /usr/bin/dropbear /sbin/dropbear)
   for b in "${BINPATHS[@]}"; do
     if [[ -x "${b}" ]]; then
       echo "Binary: $b"
@@ -389,28 +346,21 @@ check_versions_post_install() {
 
 install_debs_and_fix_deps() {
   echo "Memasang .deb di direktori kerja..."
-  # Try to fix statoverride issues before apt/dpkg ops
-  fix_statoverride || true
   dpkg -i ./*.deb || true
-  apt-get update -y || true
-  apt-get -f install -y || true
+  apt-get update -y
+  apt-get -f install -y
 }
 
 build_from_source_generic() {
   local tag="$1"
   echo "Membangun dari source untuk ${tag}..."
-  # try fix statoverride before apt-get if dpkg broken
-  fix_statoverride || true
-  apt-get update -y || true
+  apt-get update -y
   apt-get install -y build-essential autoconf automake libtool pkg-config libssl-dev zlib1g-dev wget curl || true
-
-  # default prefix is /usr/local to avoid overwriting distro binary
-  local PREFIX="${PREFIX:-/usr/local}"
   local tarfile="dropbear-${tag}.tar.bz2"
-  local bases=( "https://matt.ucc.asn.au/dropbear/releases" "https://mirror.dropbear.nl/mirror" "https://download.savannah.gnu.org/releases" "https://deb.debian.org/debian/pool/main/d/dropbear" )
+  local urls=( "https://matt.ucc.asn.au/dropbear/releases/${tarfile}" "https://mirror.dropbear.nl/mirror/${tarfile}" "https://download.savannah.gnu.org/releases/${tarfile}" )
   local found="0"
-  for b in "${bases[@]}"; do
-    if download_try "$tarfile" "$b"; then found="1"; break; fi
+  for u in "${urls[@]}"; do
+    if download_try "$tarfile" "${u%/*}"; then found="1"; break; fi
   done
   if [[ "${found}" != "1" ]]; then
     echo "ERROR: Gagal muat turun tarball ${tarfile}. Sila dapatkan secara manual dan jalankan semula." >&2
@@ -418,10 +368,7 @@ build_from_source_generic() {
   fi
   tar xf "$tarfile"
   cd "dropbear-${tag}" || { echo "Tidak dapat masuk direktori source"; return 7; }
-  ./configure --prefix="${PREFIX}" --sysconfdir=/etc || true
-  if ! command -v make >/dev/null 2>&1; then
-    echo "make tidak ditemui walaupun build-essential dipasang. Pastikan pakej build-essential berjaya dipasang."
-  fi
+  ./configure --prefix=/usr --sysconfdir=/etc || true
   make -j"$(nproc)" || true
   make install || true
   if [[ -f /etc/systemd/system/dropbear.service ]]; then
@@ -431,15 +378,11 @@ build_from_source_generic() {
 }
 
 # -------------------------
-# Main
+# Main: decide targets based on chosen $VER
 # -------------------------
 TMPDIR="$(mktemp -d)"
 cd "$TMPDIR"
 echo "Bekerja di: $TMPDIR"
-
-# If dpkg/apt was failing, try fix first
-fix_statoverride || true
-
 stop_dropbear_if_running
 
 case "${VER}" in
@@ -449,19 +392,23 @@ case "${VER}" in
     DEB_FILES=( "dropbear-bin_${TARGET_TAG}-1_${ARCH}.deb" "dropbear-bin_${TARGET_TAG}_${ARCH}.deb" "dropbear_${TARGET_TAG}-1_all.deb" "dropbear_${TARGET_TAG}_all.deb" )
     MIRRORS=( "https://old-releases.ubuntu.com/ubuntu/pool/universe/d/dropbear" "https://ftp.debian.org/debian/pool/main/d/dropbear" "https://deb.debian.org/debian/pool/main/d/dropbear" "https://snapshot.debian.org/archive/debian/pool/main/d/dropbear" )
     ;;
+
   2020.81)
     TARGET_TAG="2020.81"
     ARCH="amd64"
     DEB_FILES=( "dropbear-bin_${TARGET_TAG}-3+deb11u3_${ARCH}.deb" "dropbear_${TARGET_TAG}-3+deb11u3_all.deb" "dropbear-initramfs_${TARGET_TAG}-3+deb11u3_all.deb" "dropbear-run_${TARGET_TAG}-3+deb11u3_all.deb" )
     MIRRORS=( "https://deb.debian.org/debian-security/pool/updates/main/d/dropbear" "https://ftp.debian.org/debian/pool/main/d/dropbear" )
     ;;
+
   2022.82)
     TARGET_TAG="2022.82"
     ARCH="amd64"
     DEB_FILES=( "dropbear-bin_${TARGET_TAG}-4_${ARCH}.deb" "dropbear_${TARGET_TAG}-4_all.deb" "dropbear-initramfs_${TARGET_TAG}-4_all.deb" "dropbear-run_${TARGET_TAG}-4_all.deb" )
     MIRRORS=( "https://old-releases.ubuntu.com/ubuntu/pool/universe/d/dropbear" "https://ftp.debian.org/debian/pool/main/d/dropbear" "https://deb.debian.org/debian/pool/main/d/dropbear" "https://snapshot.debian.org/archive/debian/pool/main/d/dropbear" )
     ;;
+
   *)
+    # if VER looks like numeric-version discovered by auto-detect, use it
     if [[ "${VER}" =~ ^[0-9]{4}\.[0-9]{1,2}$ ]]; then
       TARGET_TAG="${VER}"
       ARCH="amd64"
