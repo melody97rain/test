@@ -15,39 +15,35 @@ if [[ "${EUID:-0}" -ne 0 ]]; then
   exit 1
 fi
 
-# -------------------------
-# detect latest version once
-# -------------------------
+# Pasang jq jika belum ada, sembunyikan log output
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Memasang jq secara automatik..."
+  apt-get update -y > /dev/null 2>&1
+  apt-get install -y jq > /dev/null 2>&1 || { echo "Gagal pasang jq, keluar."; exit 1; }
+fi
+
+# Buang dropbear lama di /usr/local/sbin agar tidak diguna
+if [[ -f /usr/local/sbin/dropbear ]]; then
+  echo "Membuang /usr/local/sbin/dropbear lama..."
+  rm -f /usr/local/sbin/dropbear || echo "Gagal buang /usr/local/sbin/dropbear"
+fi
+
+# Buat symlink ke /usr/sbin/dropbear kalau belum ada supaya perintah dropbear -V tidak error
+if [[ ! -f /usr/local/sbin/dropbear && -x /usr/sbin/dropbear ]]; then
+  echo "Membuat symlink /usr/local/sbin/dropbear -> /usr/sbin/dropbear"
+  ln -s /usr/sbin/dropbear /usr/local/sbin/dropbear || echo "Gagal buat symlink di /usr/local/sbin/dropbear"
+fi
+
 detect_latest_version() {
-  # Try a few authoritative pages and parse for dropbear-YYYY.NN or "Dropbear YYYY.NN"
-  local targets=( \
-    "https://matt.ucc.asn.au/dropbear/" \
-    "https://matt.ucc.asn.au/dropbear/releases/" \
-    "https://github.com/mkj/dropbear/releases" \
-  )
-  for url in "${targets[@]}"; do
-    local html=""
-    if command -v curl >/dev/null 2>&1; then
-      html="$(curl -fsSL "$url" 2>/dev/null || true)"
-    elif command -v wget >/dev/null 2>&1; then
-      html="$(wget -qO- "$url" 2>/dev/null || true)"
-    else
-      return 1
-    fi
-    if [[ -z "$html" ]]; then
-      continue
-    fi
-    # pattern: dropbear-YYYY.NN.tar or dropbear-YYYY.NN.tar.bz2
-    if echo "$html" | grep -qE 'dropbear-[0-9]{4}\.[0-9]{1,2}\.tar'; then
-      echo "$html" | grep -Eo 'dropbear-[0-9]{4}\.[0-9]{1,2}\.tar' | head -n1 \
-        | sed -E 's/dropbear-([0-9]+\.[0-9]+)\.tar.*/\1/' && return 0
-    fi
-    # pattern: "Dropbear 2025.88" etc
-    if echo "$html" | grep -qE 'Dropbear [0-9]{4}\.[0-9]{1,2}'; then
-      echo "$html" | grep -Eo 'Dropbear [0-9]{4}\.[0-9]{1,2}' | head -n1 | awk '{print $2}' && return 0
-    fi
-  done
-  return 1
+  local api_url="https://api.github.com/repos/mkj/dropbear/releases/latest"
+  local latest_ver=""
+  latest_ver="$(curl -fsSL "$api_url" | jq -r '.tag_name' | sed -E 's/^DROPBEAR_//')"
+  if [[ "$latest_ver" =~ ^[0-9]{4}\.[0-9]{1,2}$ ]]; then
+    echo "$latest_ver"
+    return 0
+  else
+    return 1
+  fi
 }
 
 echo "Mencuba kesan versi terbaru dari upstream..."
@@ -58,9 +54,6 @@ else
   echo "Gagal mengesan versi terbaru (Latest will show as unknown)."
 fi
 
-# -------------------------
-# Interactive menu (uses $LATEST_VER)
-# -------------------------
 while true; do
   echo
   echo "=== Change Dropbear Version ==="
@@ -80,7 +73,7 @@ while true; do
           break
         else
           echo "Versi terbaru tidak dapat dikesan; sila pilih versi manual."
-          break  # back to select -> will re-show menu (outer loop)
+          break
         fi
         ;;
       "2019.78"|"2020.81"|"2022.82")
@@ -97,12 +90,10 @@ while true; do
     esac
   done
 
-  # if VER not set (user chose Latest but detection failed), loop again
   if [[ -z "${VER:-}" ]]; then
     continue
   fi
 
-  # Common interactive prompts
   read -rp "Letakkan pakej pada hold selepas pemasangan apt-managed? (y/N): " yn
   if [[ "${yn,,}" =~ ^(y|yes)$ ]]; then HOLD_AFTER="1"; else HOLD_AFTER="0"; fi
 
@@ -121,7 +112,6 @@ while true; do
   read -rp "Teruskan pemasangan? (y/N): " ok
   if [[ ! "${ok,,}" =~ ^(y|yes)$ ]]; then
     echo "Batal; kembali ke menu."
-    # clear VER so menu reappears cleanly
     VER=""
     continue
   fi
@@ -129,9 +119,6 @@ while true; do
   break
 done
 
-# -------------------------
-# Helpers & core functions (unchanged logic, drop-in creation removed)
-# -------------------------
 BACKUP_DIR="/root/dropbear-backup-$(date +%Y%m%d%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 echo "Membuat backup /etc/dropbear (jika ada) -> $BACKUP_DIR"
@@ -151,7 +138,7 @@ stop_dropbear_if_running() {
 }
 
 find_dropbear_binary() {
-  local cands=(/usr/sbin/dropbear /usr/local/sbin/dropbear /usr/bin/dropbear /sbin/dropbear)
+  local cands=(/usr/sbin/dropbear /sbin/dropbear /usr/bin/dropbear)
   for p in "${cands[@]}"; do
     if [[ -x "$p" ]]; then
       echo "$p"
@@ -213,19 +200,50 @@ restart_dropbear_service() {
   echo
 }
 
+fix_statoverride_for_dropbear() {
+  echo "Membaiki dpkg-statoverride (jika wujud) untuk Dropbear..."
+  if ! command -v dpkg-statoverride >/dev/null 2>&1; then
+    echo "dpkg-statoverride tidak ditemui; langkau."
+    return 0
+  fi
+  if ! dpkg-statoverride --list >/dev/null 2>&1; then
+    echo "AMARAN: Tidak dapat membaca pangkalan data statoverride."
+    echo "Sila pertimbang pulih daripada sandaran di /var/backups/ (cth: dpkg.statoverride.0)."
+    return 0
+  fi
+  local paths=(
+    "/usr/sbin/dropbear"
+    "/usr/bin/dbclient"
+    "/usr/bin/dropbearkey"
+    "/usr/bin/dropbearconvert"
+    "/usr/bin/scp"
+    "/etc/dropbear"
+  )
+  local listed=""
+  listed="$(dpkg-statoverride --list 2>/dev/null || true)"
+  if [[ -n "$listed" ]]; then
+    local p
+    for p in "${paths[@]}"; do
+      if echo "$listed" | awk '{print $4}' | grep -Fxq "$p"; then
+        echo "Membuang override: $p"
+        dpkg-statoverride --remove "$p" || true
+      fi
+    done
+  fi
+  echo "Selesai pembersihan statoverride."
+  return 0
+}
+
 success_exit() {
   local msg="$1"
   echo
   echo "$msg"
-
   local readpe
   readpe="$(read_port_and_extra_from_default)"
   local port="${readpe%%:::*}"
   local extra_args="${readpe#*:::}"
   local binpath
   binpath="$(find_dropbear_binary)"
-
-  # DROP-IN CREATION REMOVED: do not create or modify systemd drop-in files
   if systemctl list-unit-files | grep -q '^dropbear.service'; then
     echo "Systemd unit detected: installer will NOT create or modify a drop-in file. Binary: ${binpath} Port: ${port}."
   else
@@ -235,13 +253,11 @@ success_exit() {
 [Unit]
 Description=Dropbear SSH server (installed by installer)
 After=network.target
-
 [Service]
 Type=forking
 ExecStart=/usr/sbin/dropbear -F -p 22 -P /var/run/dropbear.pid
 ExecStop=/bin/kill -TERM $MAINPID
 Restart=on-failure
-
 [Install]
 WantedBy=multi-user.target
 UNIT_EOF
@@ -249,9 +265,8 @@ UNIT_EOF
       systemctl enable --now dropbear || true
     fi
   fi
-
+  fix_statoverride_for_dropbear
   restart_dropbear_service
-
   if [[ "${KEEP_TMP:-0}" == "0" && -n "${TMPDIR:-}" ]]; then
     rm -rf "${TMPDIR}" || true
   fi
@@ -300,7 +315,6 @@ check_versions_post_install() {
   local wantver="${2:-}"
   echo "==== Pemeriksaan versi ===="
   local ok="0"
-
   if [[ "${used_deb_path:-}" == "yes" ]]; then
     for pkg in dropbear dropbear-bin dropbear-initramfs dropbear-run; do
       if dpkg -s "$pkg" >/dev/null 2>&1; then dpkg-query -W -f='${Package} ${Version}\n' "$pkg" || true; else echo "Package $pkg: TIDAK TERPASANG (apt)"; fi
@@ -308,10 +322,9 @@ check_versions_post_install() {
   else
     echo "Bukan pemasangan apt-managed (mungkin dari source)."
   fi
-
   echo
   echo "Memeriksa output versi binary di lokasi biasa:"
-  local BINPATHS=(/usr/sbin/dropbear /usr/local/sbin/dropbear /usr/bin/dropbear /sbin/dropbear)
+  local BINPATHS=(/usr/sbin/dropbear /sbin/dropbear /usr/bin/dropbear)
   for b in "${BINPATHS[@]}"; do
     if [[ -x "${b}" ]]; then
       echo "Binary: $b"
@@ -326,7 +339,6 @@ check_versions_post_install() {
       echo "----"
     fi
   done
-
   if [[ "${used_deb_path:-}" == "yes" ]]; then
     if dpkg-query -W -f='${Package} ${Version}\n' dropbear 2>/dev/null | grep -q "${wantver}" \
        || dpkg-query -W -f='${Package} ${Version}\n' dropbear-bin 2>/dev/null | grep -q "${wantver}"; then
@@ -334,12 +346,10 @@ check_versions_post_install() {
       return 0
     fi
   fi
-
   if [[ "${ok}" == "1" ]]; then
     echo "Pengesahan binary: ${wantver} ditemui -> VERIFIED."
     return 0
   fi
-
   echo "AMARAN: Gagal sahkan bahawa ${wantver} dipasang. Sila semak output di atas."
   return 10
 }
@@ -347,15 +357,15 @@ check_versions_post_install() {
 install_debs_and_fix_deps() {
   echo "Memasang .deb di direktori kerja..."
   dpkg -i ./*.deb || true
-  apt-get update -y
-  apt-get -f install -y
+  apt-get update -y > /dev/null 2>&1
+  apt-get -f install -y > /dev/null 2>&1
 }
 
 build_from_source_generic() {
   local tag="$1"
   echo "Membangun dari source untuk ${tag}..."
-  apt-get update -y
-  apt-get install -y build-essential autoconf automake libtool pkg-config libssl-dev zlib1g-dev wget curl || true
+  apt-get update -y > /dev/null 2>&1
+  apt-get install -y build-essential autoconf automake libtool pkg-config libssl-dev zlib1g-dev wget curl jq > /dev/null 2>&1 || true
   local tarfile="dropbear-${tag}.tar.bz2"
   local urls=( "https://matt.ucc.asn.au/dropbear/releases/${tarfile}" "https://mirror.dropbear.nl/mirror/${tarfile}" "https://download.savannah.gnu.org/releases/${tarfile}" )
   local found="0"
@@ -377,9 +387,6 @@ build_from_source_generic() {
   return 0
 }
 
-# -------------------------
-# Main: decide targets based on chosen $VER
-# -------------------------
 TMPDIR="$(mktemp -d)"
 cd "$TMPDIR"
 echo "Bekerja di: $TMPDIR"
@@ -408,7 +415,6 @@ case "${VER}" in
     ;;
 
   *)
-    # if VER looks like numeric-version discovered by auto-detect, use it
     if [[ "${VER}" =~ ^[0-9]{4}\.[0-9]{1,2}$ ]]; then
       TARGET_TAG="${VER}"
       ARCH="amd64"
@@ -422,7 +428,6 @@ case "${VER}" in
     ;;
 esac
 
-# Attempt to fetch .deb files first; otherwise fallback to build-from-source
 DEB_DOWNLOADED="0"
 for f in "${DEB_FILES[@]}"; do
   if [[ -f "$f" ]]; then DEB_DOWNLOADED="1"; continue; fi
