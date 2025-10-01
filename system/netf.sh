@@ -13,7 +13,7 @@ Font_Suffix="\033[0m";
 
 clear;
 echo -e "  \033[1;37m${Font_Purple}Media Stream Unlocker Test Mod By NiLphreakz${Font_Suffix}\033[0m";
-echo -e "  \033[1;37mVersion : 2.0 \033[0m";
+echo -e "  \033[1;37mVersion : 3.0 \033[0m";
 echo -e "  \033[1;37mTime    : $(date)\033[0m";
 
 # --- LOCALE FIX START ---
@@ -270,6 +270,26 @@ function MediaUnlockTest_Dazn() {
     fi
 }
 
+function MediaUnlockTest_Astro_GO() {
+    echo -n -e " Astro GO\t\t\t\t->\c"
+    local url="https://astrogo.astro.com.my"
+    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "$url")
+
+    if [[ "$result" == "200" ]]; then
+        # dapatkan region dari IP geolocation
+        local geojson=$(curl -fsSL http://ip-api.com/json/)
+        local region=$(echo "$geojson" | jq -r ".countryCode")
+        if [[ -z "$region" ]] || [[ "$region" == "null" ]]; then
+            region="Unknown"
+        fi
+        echo -n -e "\r Astro GO\t\t\t\t: ${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
+    elif [[ "$result" == "403" ]]; then
+        echo -n -e "\r Astro GO\t\t\t\t: ${Font_Red}No${Font_Suffix}\n"
+    else
+        echo -n -e "\r Astro GO\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+    fi
+}
+
 function IPInfo() {
     local result=$(curl -fsSL http://ip-api.com/json/ 2>&1);
 
@@ -312,6 +332,7 @@ function global() {
     MediaUnlockTest_TVBAnywhere ${1};
     MediaUnlockTest_SpotifyRegistration ${1};
     MediaUnlockTest_Dazn ${1};
+    MediaUnlockTest_Astro_GO ${1};
 }
 
 function startcheck() {
