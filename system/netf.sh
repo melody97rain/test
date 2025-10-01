@@ -244,7 +244,7 @@ function MediaUnlockTest_TVBAnywhere() {
 
 function MediaUnlockTest_SpotifyRegistration() {
     echo -n -e " Spotify Registration\t\t\t->\c"
-    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.spotify.com/signup/")
+    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://accounts.spotify.com")
     local region=""
     if [[ "$result" == "200" ]]; then
         region="Global"
