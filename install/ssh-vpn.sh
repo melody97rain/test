@@ -120,6 +120,13 @@ sed -i '/Port 22/a Port 200' /etc/ssh/sshd_config
 sed -i 's/#Port 22/Port 22/g' /etc/ssh/sshd_config
 /etc/init.d/ssh restart
 
+# install rsyslog
+apt update && apt install rsyslog -y
+
+# enable & start rsyslog
+systemctl enable rsyslog
+systemctl start rsyslog
+
 # install dropbear
 apt update -y
 apt install -y dropbear
