@@ -4,7 +4,7 @@
 <h2 align="center"> Supported Linux Distribution</h2>
 <p align="center"><img src="https://d33wubrfki0l68.cloudfront.net/5911c43be3b1da526ed609e9c55783d9d0f6b066/9858b/assets/img/debian-ubuntu-hover.png"width="400"></p>
 
-## 🌀SUPPORT & TESTED ON DEBIAN 12/13 & UBUNTU 22.04, 24.04, & 25.04🌀
+## 🌀SUPPORT ON DEBIAN 12/13 & UBUNTU 22.04, 24.04, & 25.04🌀
 
 ## ⌛INSTALLATION⌛
 
