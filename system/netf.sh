@@ -1,5 +1,6 @@
 #!/bin/bash
 #Script Updater By NiLphreakz
+
 Font_Black="\033[30m";
 Font_Red="\033[31m";
 Font_Green="\033[32m";
@@ -10,15 +11,22 @@ Font_SkyBlue="\033[36m";
 Font_White="\033[37m";
 Font_Suffix="\033[0m";
 
-
 clear;
 echo -e "  \033[1;37m${Font_Purple}Media Stream Unlocker Test Mod By NiLphreakz${Font_Suffix}\033[0m";
 echo -e "  \033[1;37mVersion : 2.0 \033[0m";
-echo -e "  \033[1;37mTime    : $(date)\033[0m"
+echo -e "  \033[1;37mTime    : $(date)\033[0m";
+
+# --- LOCALE FIX START ---
+if ! locale -a | grep -qi 'en_US.utf8'; then
+    echo "en_US.UTF-8 locale tidak ditemukan, sedang menambahkannya..."
+    sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen > /dev/null 2>&1
+    locale-gen > /dev/null 2>&1
+fi
 
 export LANG="en_US.UTF-8";
 export LANGUAGE="en_US.UTF-8";
 export LC_ALL="en_US.UTF-8";
+# --- LOCALE FIX END ---
 
 function InstallJQ() {
     if [ -e "/etc/redhat-release" ];then
@@ -53,15 +61,13 @@ function InstallCurl() {
 }
 
 function PharseJSON() {
-    # 使用方法: PharseJSON "要解析的原JSON文本" "要解析的键值"
-    # Example: PharseJSON ""Value":"123456"" "Value" [返回结果: 123456]
-    echo -n $1 | jq -r .$2;
+    echo -n "$1" | jq -r ".$2";
 }
 
 function GameTest_Steam(){
     echo -n -e " Steam\t\t\t\t\t->\c";
     local result=$(curl --user-agent "${UA_Browser}" -${1} -fsSL --max-time 10 https://store.steampowered.com/app/761830 2>&1 | grep priceCurrency | cut -d '"' -f4);
-    
+
     if [ ! -n "$result" ]; then
         echo -n -e "\r Steam\t\t\t\t\t: ${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
     else
@@ -114,128 +120,198 @@ function MediaUnlockTest_HotStar() {
     else
         echo -n -e "\r HotStar\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
     fi
-
 }
 
 function MediaUnlockTest_iQiyi(){
     echo -n -e " iQiyi Global\t\t\t\t->\c";
     local tmpresult=$(curl -${1} -s -I "https://www.iq.com/" 2>&1);
     if [[ "$tmpresult" == "curl"* ]];then
-        	echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Red}Failed (Network Connection)${Font_Suffix}\n"
-        	return;
+        echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Red}Failed (Network Connection)${Font_Suffix}\n"
+        return;
     fi
-    
+
     local result=$(echo "${tmpresult}" | grep 'mod=' | awk '{print $2}' | cut -f2 -d'=' | cut -f1 -d';');
     if [ -n "$result" ]; then
-		if [[ "$result" == "ntw" ]]; then
-			echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Green}Yes(Region: TW)${Font_Suffix}\n"
-			return;
-		else
-			result=$(echo ${result} | tr 'a-z' 'A-Z') 
-			echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Green}Yes(Region: ${result})${Font_Suffix}\n"
-			return;
-		fi	
+        if [[ "$result" == "ntw" ]]; then
+            echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Green}Yes(Region: TW)${Font_Suffix}\n"
+            return;
+        else
+            result=$(echo ${result} | tr 'a-z' 'A-Z')
+            echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Green}Yes(Region: ${result})${Font_Suffix}\n"
+            return;
+        fi
     else
-		echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
-		return;
-	fi	
+        echo -n -e "\r iQiyi Global\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+        return;
+    fi
 }
 
 function MediaUnlockTest_Viu_com() {
     echo -n -e " Viu.com\t\t\t\t->\c";
     local tmpresult=$(curl -${1} -s -o /dev/null -L --max-time 30 -w '%{url_effective}\n' "https://www.viu.com/" 2>&1);
-	if [[ "${tmpresult}" == "curl"* ]];then
+    if [[ "${tmpresult}" == "curl"* ]];then
         echo -n -e "\r Viu.com\t\t\t\t: ${Font_Red}Failed (Network Connection)${Font_Suffix}\n"
         return;
     fi
-	
-	local result=$(echo ${tmpresult} | cut -f5 -d"/")
-	if [ -n "${result}" ]; then
-		if [[ "${result}" == "no-service" ]]; then
-			echo -n -e "\r Viu.com\t\t\t\t: ${Font_Red}No${Font_Suffix}\n"
-			return;
-		else
-			result=$(echo ${result} | tr 'a-z' 'A-Z')
-			echo -n -e "\r Viu.com\t\t\t\t: ${Font_Green}Yes(Region: ${result})${Font_Suffix}\n"
-			return;
-		fi
+
+    local result=$(echo ${tmpresult} | cut -f5 -d"/")
+    if [ -n "${result}" ]; then
+        if [[ "${result}" == "no-service" ]]; then
+            echo -n -e "\r Viu.com\t\t\t\t: ${Font_Red}No${Font_Suffix}\n"
+            return;
+        else
+            result=$(echo ${result} | tr 'a-z' 'A-Z')
+            echo -n -e "\r Viu.com\t\t\t\t: ${Font_Green}Yes(Region: ${result})${Font_Suffix}\n"
+            return;
+        fi
     else
-		echo -n -e "\r Viu.com\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
-		return;
-	fi
+        echo -n -e "\r Viu.com\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+        return;
+    fi
 }
 
 function MediaUnlockTest_YouTube() {
     echo -n -e " YouTube\t\t\t\t->\c";
     local tmpresult=$(curl -${1} -s -H "Accept-Language: en" "https://www.youtube.com/premium")
     local region=$(curl --user-agent "${UA_Browser}" -${1} -sL "https://www.youtube.com/red" | sed 's/,/\n/g' | grep "countryCode" | cut -d '"' -f4)
-	if [ -n "$region" ]; then
+    if [ -n "$region" ]; then
         sleep 0
-	else
-		region=US
-	fi	
-	
+    else
+        region=US
+    fi
+
     if [[ "$tmpresult" == "curl"* ]];then
         echo -n -e "\r YouTube\t\t\t\t: ${Font_Red}Failed (Network Connection)${Font_Suffix}\n"
         return;
     fi
-    
+
     local result=$(echo $tmpresult | grep 'Premium is not available in your country')
     if [ -n "$result" ]; then
         echo -n -e "\r YouTube\t\t\t\t: ${Font_Red}No Premium${Font_Suffix}(Region: ${region})${Font_Suffix} \n"
-        return;
-		
+        return
+
     fi
     local result=$(echo $tmpresult | grep 'YouTube and YouTube Music ad-free')
     if [ -n "$result" ]; then
         echo -n -e "\r YouTube\t\t\t\t: ${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
         return;
-	else
-		echo -n -e "\r YouTube\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
-		
-    fi	
-	
-    
+    else
+        echo -n -e "\r YouTube\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+    fi
+}
+
+function MediaUnlockTest_DisneyPlus() {
+    echo -n -e " Disney+\t\t\t\t->\c"
+    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.disneyplus.com/welcome")
+    local region=""
+    if [[ "$result" == "200" ]]; then
+        region="US"
+        echo -n -e "\r Disney+\t\t\t\t: ${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
+    elif [[ "$result" == "403" ]]; then
+        echo -n -e "\r Disney+\t\t\t\t: ${Font_Red}No${Font_Suffix}\n"
+    else
+        echo -n -e "\r Disney+\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+    fi
+}
+
+function MediaUnlockTest_AmazonPrime() {
+    echo -n -e " Amazon Prime Video\t\t\t->\c"
+    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.primevideo.com/")
+    local region=""
+    if [[ "$result" == "200" ]]; then
+        region="US"
+        echo -n -e "\r Amazon Prime Video\t\t\t: ${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
+    elif [[ "$result" == "403" ]]; then
+        echo -n -e "\r Amazon Prime Video\t\t\t: ${Font_Red}No${Font_Suffix}\n"
+    else
+        echo -n -e "\r Amazon Prime Video\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+    fi
+}
+
+function MediaUnlockTest_TVBAnywhere() {
+    echo -n -e " TVBAnywhere+\t\t\t\t->\c"
+    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.tvbanywhere.com/")
+    local region=""
+    if [[ "$result" == "200" ]]; then
+        region="HK"
+        echo -n -e "\r TVBAnywhere+\t\t\t\t: ${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
+    elif [[ "$result" == "403" ]]; then
+        echo -n -e "\r TVBAnywhere+\t\t\t\t: ${Font_Red}No${Font_Suffix}\n"
+    else
+        echo -n -e "\r TVBAnywhere+\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+    fi
+}
+
+function MediaUnlockTest_SpotifyRegistration() {
+    echo -n -e " Spotify Registration\t\t\t->\c"
+    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.spotify.com/signup/")
+    local region=""
+    if [[ "$result" == "200" ]]; then
+        region="Global"
+        echo -n -e "\r Spotify Registration\t\t\t: ${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
+    elif [[ "$result" == "403" ]]; then
+        echo -n -e "\r Spotify Registration\t\t\t: ${Font_Red}No${Font_Suffix}\n"
+    else
+        echo -n -e "\r Spotify Registration\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+    fi
+}
+
+function MediaUnlockTest_Dazn() {
+    echo -n -e " DAZN\t\t\t\t\t->\c"
+    local result=$(curl $useNIC $xForward -${1} --user-agent "${UA_Browser}" -fsL --write-out %{http_code} --output /dev/null --max-time 10 "https://www.dazn.com/en-US/welcome")
+    local region=""
+    if [[ "$result" == "200" ]]; then
+        region="US"
+        echo -n -e "\r DAZN\t\t\t\t\t: ${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
+    elif [[ "$result" == "403" ]]; then
+        echo -n -e "\r DAZN\t\t\t\t\t: ${Font_Red}No${Font_Suffix}\n"
+    else
+        echo -n -e "\r DAZN\t\t\t\t\t: ${Font_Red}Failed${Font_Suffix}\n"
+    fi
 }
 
 function IPInfo() {
     local result=$(curl -fsSL http://ip-api.com/json/ 2>&1);
-	
-	echo -e -n " IP\t\t\t\t\t->\c";
+
+    echo -e -n " IP\t\t\t\t\t->\c";
     local ip=$(PharseJSON "${result}" "query");
-	echo -e -n "\r IP\t\t\t\t\t: ${Font_Green}${ip}${Font_Suffix}\n";
-	
-	echo -e -n " Country\t\t\t\t->\c";
-	local country=$(PharseJSON "${result}" "country");
-	echo -e -n "\r Country\t\t\t\t: ${Font_Green}${country}${Font_Suffix}\n";
-	
-	echo -e -n " Region\t\t\t\t\t->\c";
-	local region=$(PharseJSON "${result}" "regionName");
-	echo -e -n "\r Region\t\t\t\t\t: ${Font_Green}${region}${Font_Suffix}\n";
-	
-	echo -e -n " City\t\t\t\t\t->\c";
-	local city=$(PharseJSON "${result}" "city");
-	echo -e -n "\r City\t\t\t\t\t: ${Font_Green}${city}${Font_Suffix}\n";
-	
-	echo -e -n " ISP\t\t\t\t\t->\c";
-	local isp=$(PharseJSON "${result}" "isp");
-	echo -e -n "\r ISP\t\t\t\t\t: ${Font_Green}${isp}${Font_Suffix}\n";
+    echo -e -n "\r IP\t\t\t\t\t: ${Font_Green}${ip}${Font_Suffix}\n";
+
+    echo -e -n " Country\t\t\t\t->\c";
+    local country=$(PharseJSON "${result}" "country");
+    echo -e -n "\r Country\t\t\t\t: ${Font_Green}${country}${Font_Suffix}\n";
+
+    echo -e -n " Region\t\t\t\t\t->\c";
+    local region=$(PharseJSON "${result}" "regionName");
+    echo -e -n "\r Region\t\t\t\t\t: ${Font_Green}${region}${Font_Suffix}\n";
+
+    echo -e -n " City\t\t\t\t\t->\c";
+    local city=$(PharseJSON "${result}" "city");
+    echo -e -n "\r City\t\t\t\t\t: ${Font_Green}${city}${Font_Suffix}\n";
+
+    echo -e -n " ISP\t\t\t\t\t->\c";
+    local isp=$(PharseJSON "${result}" "isp");
+    echo -e -n "\r ISP\t\t\t\t\t: ${Font_Green}${isp}${Font_Suffix}\n";
 }
 
 function MediaUnlockTest() {
-	IPInfo ${1};
-	
+    IPInfo ${1};
     global ${1};
 }
 
 function global() {
-	echo -e "\n \033[1;37m${Font_Purple}-- Global --${Font_Suffix}\033[0m"
-	MediaUnlockTest_Netflix ${1};
-	MediaUnlockTest_HotStar ${1};
-	MediaUnlockTest_YouTube ${1};
-	MediaUnlockTest_iQiyi ${1};
-	MediaUnlockTest_Viu_com ${1};
-	GameTest_Steam ${1};
+    echo -e "\n \033[1;37m${Font_Purple}-- Global --${Font_Suffix}\033[0m"
+    MediaUnlockTest_Netflix ${1};
+    MediaUnlockTest_HotStar ${1};
+    MediaUnlockTest_YouTube ${1};
+    MediaUnlockTest_iQiyi ${1};
+    MediaUnlockTest_Viu_com ${1};
+    GameTest_Steam ${1};
+    MediaUnlockTest_DisneyPlus ${1};
+    MediaUnlockTest_AmazonPrime ${1};
+    MediaUnlockTest_TVBAnywhere ${1};
+    MediaUnlockTest_SpotifyRegistration ${1};
+    MediaUnlockTest_Dazn ${1};
 }
 
 function startcheck() {
@@ -256,36 +332,35 @@ function startcheck() {
 }
 
 # install curl
-if ! curl -V > /dev/null 2>&1;then
+if ! curl -V > /dev/null 2>&1; then
     InstallCurl;
 fi
 
 # install jq
-if ! jq -V > /dev/null 2>&1;then
+if ! jq -V > /dev/null 2>&1; then
     InstallJQ;
 fi
 
 echo "";
 echo -e " \033[1;37m${Font_Purple}-- IPV4 --${Font_Suffix}\033[0m";
 check4=$(ping 1.1.1.1 -c 1 2>&1);
-if [[ "$check4" != *"unreachable"* ]] && [[ "$check4" != *"Unreachable"* ]];then
+if [[ "$check4" != *"unreachable"* ]] && [[ "$check4" != *"Unreachable"* ]]; then
     startcheck "${1}" "4";
 else
-    v4=""
+    v4="";
     echo -e "${Font_SkyBlue}The current host does not support IPV4, skip...${Font_Suffix}";
 fi
 
 echo ""
 echo -e " \033[1;37m${Font_Purple}-- IPV6 --${Font_Suffix}\033[0m";
 check6=$(ping6 240c::6666 -c 1 2>&1);
-if [[ "$check6" != *"unreachable"* ]] && [[ "$check6" != *"Unreachable"* ]];then
+if [[ "$check6" != *"unreachable"* ]] && [[ "$check6" != *"Unreachable"* ]]; then
     v6="1"
 else
-    v6=""
+    v6="";
     echo -e "${Font_SkyBlue}The current host does not support IPV6, skip...${Font_Suffix}";
 fi
 echo ""
 echo -e "${Font_Green}Finished Test${Font_Suffix}"
 echo ""
 read -n1 -r -p "Press any key to continue..."
-system
