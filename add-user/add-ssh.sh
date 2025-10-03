@@ -1,32 +1,35 @@
 #!/bin/bash
-MYIP=$(curl -sS ipv4.icanhazip.com)
-# PROVIDED
-creditt=$(cat /root/provided)
-# TEXT ON BOX COLOUR
-box=$(cat /etc/box)
-# LINE COLOUR
-line=$(cat /etc/line)
-# BACKGROUND TEXT COLOUR
-back_text=$(cat /etc/back)
-clear
-echo -e   "  \e[$line═══════════════════════════════════════════════════════\e[m"
-echo -e   "  \e[$back_text             \e[30m[\e[$box CREATE USER SSH & OPENVPN\e[30m ]\e[1m             \e[m"
-echo -e   "  \e[$line═══════════════════════════════════════════════════════\e[m"
 
-# read username and ensure it's unique (loop until a non-existing username is provided)
+export PATH=$PATH:/usr/sbin:/sbin
+
+MYIP=$(curl -sS ipv4.icanhazip.com)
+creditt=$(cat /root/provided)
+box=$(cat /etc/box)
+line=$(cat /etc/line)
+back_text=$(cat /etc/back)
+
+clear
+echo -e "  \e[$line═══════════════════════════════════════════════════════\e[m"
+echo -e "  \e[$back_text             \e[30m[\e[$box CREATE USER SSH & OPENVPN\e[30m ]\e[1m             \e[m"
+echo -e "  \e[$line═══════════════════════════════════════════════════════\e[m"
+
+# Periksa useradd ada atau tidak
+if ! command -v useradd >/dev/null 2>&1; then
+  echo "useradd tidak dijumpai. Sila pasang pakej passwd dengan:"
+  echo "sudo apt update && sudo apt install passwd"
+  exit 1
+fi
+
 while true; do
   read -p "   Username : " Login
-  # basic sanity: non-empty
   if [ -z "$Login" ]; then
     echo "   Nama pengguna kosong. Sila cuba lagi."
     continue
   fi
-  # check if user exists
   if id -u "$Login" >/dev/null 2>&1; then
     echo "   Username '$Login' sudah wujud. Sila masukkan username lain."
     continue
   fi
-  # optional: validate username characters (only allow alnum, dot, underscore, dash)
   if ! [[ "$Login" =~ ^[a-zA-Z0-9._-]+$ ]]; then
     echo "   Username mengandungi aksara tidak dibenarkan. Benarkan: A-Z a-z 0-9 . _ -"
     continue
@@ -37,42 +40,48 @@ done
 read -p "   Password : " Pass
 read -p "   Expired (days): " masaaktif
 
-IP=$(wget -qO- icanhazip.com);
-source /var/lib/premium-script/ipvps.conf
-if [[ "$IP" = "" ]]; then
-  domain=$(cat /usr/local/etc/xray/domain)
+IP=$(wget -qO- icanhazip.com)
+source /var/lib/premium-script/ipvps.conf 2>/dev/null
+if [[ -z "$IP" ]]; then
+  domain=$(cat /usr/local/etc/xray/domain 2>/dev/null)
 else
   domain=$IP
 fi
-ssl="$(cat ~/log-install.txt | grep -w "Stunnel4" | cut -d: -f2)"
-sqd="$(cat ~/log-install.txt | grep -w "Squid" | cut -d: -f2)"
-ovpn="$(netstat -nlpt | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2)"
-ovpn2="$(netstat -nlpu | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2)"
-ovpn3="$(cat ~/log-install.txt | grep -w "OHP OpenVPN" | cut -d: -f2|sed 's/ //g')"
-ovpn4="$(cat ~/log-install.txt | grep -w "OpenVPN SSL" | cut -d: -f2|sed 's/ //g')"
-ohpssh="$(cat ~/log-install.txt | grep -w "OHP SSH" | cut -d: -f2|sed 's/ //g')"
-ohpdrop="$(cat ~/log-install.txt | grep -w "OHP Dropbear" | cut -d: -f2|sed 's/ //g')"
-wsdropbear="$(cat ~/log-install.txt | grep -w "Websocket SSH(HTTP)" | cut -d: -f2|sed 's/ //g')"
-wsstunnel="$(cat ~/log-install.txt | grep -w "Websocket SSL(HTTPS)" | cut -d: -f2|sed 's/ //g')"
-wsovpn="$(cat ~/log-install.txt | grep -w "Websocket OpenVPN" | cut -d: -f2|sed 's/ //g')"
+
+ssl=$(grep -w "Stunnel4" ~/log-install.txt | cut -d: -f2 | xargs)
+sqd=$(grep -w "Squid" ~/log-install.txt | cut -d: -f2 | xargs)
+ovpn=$(netstat -nlpt | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2)
+ovpn2=$(netstat -nlpu | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2)
+ovpn3=$(grep -w "OHP OpenVPN" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+ovpn4=$(grep -w "OpenVPN SSL" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+ohpssh=$(grep -w "OHP SSH" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+ohpdrop=$(grep -w "OHP Dropbear" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+wsdropbear=$(grep -w "Websocket SSH(HTTP)" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+wsstunnel=$(grep -w "Websocket SSL(HTTPS)" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+wsovpn=$(grep -w "Websocket OpenVPN" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+
 sleep 1
-echo Ping Host
-echo Check Acces...
+echo "Ping Host"
+echo "Check Access..."
 sleep 0.5
-echo Permission Accepted
+echo "Permission Accepted"
 clear
 sleep 0.5
-echo Create Acc: $Login
+echo "Create Acc: $Login"
 sleep 0.5
-echo Setting Password: $Pass
+echo "Setting Password: $Pass"
 sleep 0.5
 clear
-harini=`date -d "0 days" +"%Y-%m-%d"`
-useradd -e `date -d "$masaaktif days" +"%Y-%m-%d"` -s /bin/false -M $Login
-exp="$(chage -l $Login | grep "Account expires" | awk -F": " '{print $2}')"
-exp1=`date -d "$masaaktif days" +"%Y-%m-%d"`
-echo -e "$Pass\n$Pass\n"|passwd $Login &> /dev/null
-echo -e ""
+
+harini=$(date -d "0 days" +"%Y-%m-%d")
+useradd_expire_date=$(date -d "$masaaktif days" +"%Y-%m-%d")
+
+/usr/sbin/useradd -e "$useradd_expire_date" -s /bin/false -M "$Login"
+
+exp=$(chage -l "$Login" | grep "Account expires" | awk -F": " '{print $2}')
+echo -e "$Pass\n$Pass" | passwd "$Login" &> /dev/null
+
+echo ""
 echo -e "Informasi Account SSH & OpenVPN"
 echo -e "\e[$line═════════════════════════════════\e[m"
 echo -e "Username       : $Login"
@@ -82,14 +91,14 @@ echo -e "Domain         : $domain"
 echo -e "IP/Host        : $MYIP"
 echo -e "OpenSSH        : 22"
 echo -e "Dropbear       : 442, 109"
-echo -e "SSL/TLS        :$ssl"
+echo -e "SSL/TLS        : $ssl"
 echo -e "WS SSH(HTTP)   : $wsdropbear"
 echo -e "WS SSL(HTTPS)  : $wsstunnel"
 echo -e "WS OpenVPN     : $wsovpn"
 echo -e "OHP Dropbear   : $ohpdrop"
 echo -e "OHP OpenSSH    : $ohpssh"
 echo -e "OHP OpenVPN    : $ovpn3"
-echo -e "Port Squid     :$sqd"
+echo -e "Port Squid     : $sqd"
 echo -e "Badvpn(UDPGW)  : 7100-7300"
 echo -e "\e[$line═════════════════════════════════\e[m"
 echo -e "CONFIG OPENVPN"
@@ -105,6 +114,6 @@ echo -e "PAYLOAD WEBSOCKET 2 : GET wss://bug.com/ HTTP/1.1[crlf]Host: bug.com.$d
 echo -e ""
 echo -e "----------------------"
 echo -e "Created  : $harini"
-echo -e "Expired  : $exp1"
+echo -e "Expired  : $useradd_expire_date"
 echo -e "----------------------"
 echo -e "Script By $creditt"
