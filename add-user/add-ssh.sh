@@ -1,12 +1,13 @@
 #!/bin/bash
 
-export PATH=$PATH:/usr/sbin:/sbin
+# add-ssh (kemaskini untuk integrasi auto-delete expired users)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin:/usr/bin:/bin:$PATH"
 
 MYIP=$(curl -sS ipv4.icanhazip.com)
-creditt=$(cat /root/provided)
-box=$(cat /etc/box)
-line=$(cat /etc/line)
-back_text=$(cat /etc/back)
+creditt=$(cat /root/provided 2>/dev/null || echo "Unknown")
+box=$(cat /etc/box 2>/dev/null || echo "47")
+line=$(cat /etc/line 2>/dev/null || echo "47")
+back_text=$(cat /etc/back 2>/dev/null || echo "47")
 
 clear
 echo -e "  \e[$line═══════════════════════════════════════════════════════\e[m"
@@ -15,8 +16,7 @@ echo -e "  \e[$line════════════════════�
 
 # Periksa useradd ada atau tidak
 if ! command -v useradd >/dev/null 2>&1; then
-  echo "useradd tidak dijumpai. Sila pasang pakej passwd dengan:"
-  echo "sudo apt update && sudo apt install passwd"
+  echo "useradd tidak dijumpai. Sila pasang pakej yang sesuai (passwd/adduser)."
   exit 1
 fi
 
@@ -40,25 +40,27 @@ done
 read -p "   Password : " Pass
 read -p "   Expired (days): " masaaktif
 
-IP=$(wget -qO- icanhazip.com)
-source /var/lib/premium-script/ipvps.conf 2>/dev/null
-if [[ -z "$IP" ]]; then
-  domain=$(cat /usr/local/etc/xray/domain 2>/dev/null)
+# Fallback for IP/domain detection
+IP=$(wget -qO- icanhazip.com 2>/dev/null || echo "")
+source /var/lib/premium-script/ipvps.conf 2>/dev/null || true
+if [[ -z "$IP" ]] && [[ -z "$domain" ]]; then
+  domain=$(cat /usr/local/etc/xray/domain 2>/dev/null || echo "$MYIP")
 else
-  domain=$IP
+  domain=${IP:-$domain}
 fi
 
-ssl=$(grep -w "Stunnel4" ~/log-install.txt | cut -d: -f2 | xargs)
-sqd=$(grep -w "Squid" ~/log-install.txt | cut -d: -f2 | xargs)
-ovpn=$(netstat -nlpt | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2)
-ovpn2=$(netstat -nlpu | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2)
-ovpn3=$(grep -w "OHP OpenVPN" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
-ovpn4=$(grep -w "OpenVPN SSL" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
-ohpssh=$(grep -w "OHP SSH" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
-ohpdrop=$(grep -w "OHP Dropbear" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
-wsdropbear=$(grep -w "Websocket SSH(HTTP)" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
-wsstunnel=$(grep -w "Websocket SSL(HTTPS)" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
-wsovpn=$(grep -w "Websocket OpenVPN" ~/log-install.txt | cut -d: -f2 | sed 's/ //g')
+# gather ports/services (best-effort, keep original logic)
+ssl=$(grep -w "Stunnel4" ~/log-install.txt 2>/dev/null | cut -d: -f2 | xargs)
+sqd=$(grep -w "Squid" ~/log-install.txt 2>/dev/null | cut -d: -f2 | xargs)
+ovpn=$(netstat -nlpt 2>/dev/null | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2 | head -n1)
+ovpn2=$(netstat -nlpu 2>/dev/null | grep -i openvpn | grep -i 0.0.0.0 | awk '{print $4}' | cut -d: -f2 | head -n1)
+ovpn3=$(grep -w "OHP OpenVPN" ~/log-install.txt 2>/dev/null | cut -d: -f2 | sed 's/ //g')
+ovpn4=$(grep -w "OpenVPN SSL" ~/log-install.txt 2>/dev/null | cut -d: -f2 | sed 's/ //g')
+ohpssh=$(grep -w "OHP SSH" ~/log-install.txt 2>/dev/null | cut -d: -f2 | sed 's/ //g')
+ohpdrop=$(grep -w "OHP Dropbear" ~/log-install.txt 2>/dev/null | cut -d: -f2 | sed 's/ //g')
+wsdropbear=$(grep -w "Websocket SSH(HTTP)" ~/log-install.txt 2>/dev/null | cut -d: -f2 | sed 's/ //g')
+wsstunnel=$(grep -w "Websocket SSL(HTTPS)" ~/log-install.txt 2>/dev/null | cut -d: -f2 | sed 's/ //g')
+wsovpn=$(grep -w "Websocket OpenVPN" ~/log-install.txt 2>/dev/null | cut -d: -f2 | sed 's/ //g')
 
 sleep 1
 echo "Ping Host"
@@ -76,10 +78,28 @@ clear
 harini=$(date -d "0 days" +"%Y-%m-%d")
 useradd_expire_date=$(date -d "$masaaktif days" +"%Y-%m-%d")
 
+# create user (no home, shell false)
+# we keep -M if you don't want a home created; change if you want /home created
 /usr/sbin/useradd -e "$useradd_expire_date" -s /bin/false -M "$Login"
 
-exp=$(chage -l "$Login" | grep "Account expires" | awk -F": " '{print $2}')
-echo -e "$Pass\n$Pass" | passwd "$Login" &> /dev/null
+# Ensure password is set
+echo -e "$Pass\n$Pass" | passwd "$Login" &> /dev/null || { echo "Failed to set password for $Login"; }
+
+# ---- NEW: ensure expiry is stored correctly in /etc/shadow (use chage)
+if command -v chage >/dev/null 2>&1; then
+  # chage -E accepts YYYY-MM-DD; it will set the shadow expiry field properly
+  chage -E "$useradd_expire_date" "$Login" 2>/dev/null || echo "Warning: chage failed to set expiry for $Login"
+else
+  echo "Warning: chage not found; remove-expired script expects expiry field in /etc/shadow." >&2
+fi
+
+# Also write a short record to /usr/local/bin/alluser so remove script can see it (same format)
+tglexp="$(date -d "$useradd_expire_date" '+%d %b %Y' 2>/dev/null || echo "$useradd_expire_date")"
+mkdir -p /usr/local/bin 2>/dev/null
+echo "Expired- User : $Login Expire at : $tglexp" >> /usr/local/bin/alluser
+
+# For display, try to get chage output
+exp=$(chage -l "$Login" 2>/dev/null | grep "Account expires" | awk -F": " '{print $2}' || echo "$tglexp")
 
 echo ""
 echo -e "Informasi Account SSH & OpenVPN"
